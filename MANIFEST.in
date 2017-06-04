@@ -1,0 +1,2 @@
+recursive-include js *
+global-exclude *.py[cdo] __pycache__ *.so *.pyd .DS_Store
