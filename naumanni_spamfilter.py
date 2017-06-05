@@ -6,31 +6,43 @@ import json
 import logging
 from urllib.parse import urlencode
 
-from celery import current_app, group
+from celery import current_app as current_celeryapp, group
+from flask import Blueprint, request, current_app as current_flaskapp
 from tornado import httpclient
 
 from naumanni import celery
+from naumanni.mastodon_models import Account, Status
 from naumanni.plugin import Plugin
+from naumanni.web.utils import api_jsonify
 
 logger = logging.getLogger(__name__)
 
+SPAMFILTER = 'spamfilter'
 SPAM_API_ENDPOINT = 'https://mstdn.onosendai.jp/ai/spam/'
+blueprint = Blueprint(SPAMFILTER, __name__)
 
-
-def _content_to_hexdigest(plainContent):
-    return sha256(plainContent.encode('utf8')).hexdigest()
-
-
-def _make_redis_key(hash):
-    return '{}:spam:{}'.format(__name__, hash)
+SPAM_REPORT_REDIS_KEY = '{}:report'.format(__name__)
 
 
 class SpamFilterPlugin(Plugin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def on_after_initialize_webserver(self, webserver):
+        """webserver初期化後によばれるので、このPluginのAPIを追加する"""
+        webserver.flask_app.register_plugin_blueprint(SPAMFILTER, blueprint)
+
+    def on_after_configure_celery(self, celeryapp):
+        """Celery初期化後によばれるので、Periodic Taskを追加する"""
+        # 5分毎にレポートを送信する
+        celeryapp.add_periodic_task(
+            5 * 60.0,
+            bulk_report_spams.s(),
+        )
+        bulk_report_spams.delay()
+
     def on_filter_statuses(self, objects, entities):
-        redis = current_app.naumanni_app.redis
+        redis = current_celeryapp.naumanni.redis
 
         #
         texts = defaultdict(list)
@@ -84,10 +96,24 @@ class SpamFilterPlugin(Plugin):
         return objects
 
 
+@blueprint.route('/report', methods=['POST'])
+def report_spam():
+    status = Status(**request.json['status'])
+    account = Account(**request.json['account'])
+
+    report = '@{},{}'.format(account.acct, status.plainContent).encode('utf-8')
+
+    # push
+    redis = current_flaskapp.naumanni.redis
+    redis.sadd(SPAM_REPORT_REDIS_KEY, report)
+
+    return api_jsonify({'result': 'ok'})
+
+
 @celery.task
 def test_spams(rawPlainContents):
     # remove returns
-    plainContents = [txt.replace('\n', ' ') for txt in rawPlainContents]
+    plainContents = [_strip_content(txt) for txt in rawPlainContents]
 
     http_client = httpclient.HTTPClient()
     body = urlencode({'texts': '\n'.join(plainContents), 'spams': ''}, encoding='utf-8')
@@ -135,3 +161,47 @@ def test_spams(rawPlainContents):
         return {
             'failed': 'status code %s: %s'.format(response.code, response.reason)
         }
+
+
+@celery.task(ignore_result=True)
+def bulk_report_spams():
+    redis = current_celeryapp.naumanni.redis
+    with redis.pipeline() as pipe:
+        pipe.smembers(SPAM_REPORT_REDIS_KEY)
+        pipe.delete(SPAM_REPORT_REDIS_KEY)
+        result = pipe.execute()
+        reports = result[0]
+
+    if not reports:
+        logger.info('no report spams')
+        return
+
+    logger.info('report spams %r', reports)
+
+    reports = b'\n'.join(reports).decode('utf-8')
+
+    http_client = httpclient.HTTPClient()
+    body = urlencode({'spams': reports, 'texts': ''}, encoding='utf-8')
+    try:
+        http_client.fetch(
+            SPAM_API_ENDPOINT,
+            method='POST',
+            body=body
+        )
+    except httpclient.HTTPError as exc:
+        print(exc)
+        print(exc.response.body.decode('utf-8'))
+        logger.error(exc.response.body.decode('utf-8'))
+        raise
+
+
+def _content_to_hexdigest(plainContent):
+    return sha256(plainContent.encode('utf8')).hexdigest()
+
+
+def _make_redis_key(hash):
+    return '{}:spam:{}'.format(__name__, hash)
+
+
+def _strip_content(c):
+    return c.replace('\n', ' ')

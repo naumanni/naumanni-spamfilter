@@ -62,13 +62,9 @@ export default function initialize({api, uiComponents}) {
       const score = status.getExtended('spamfilter')
       const menus = super.renderStatusMenuItems()
 
-      if(!score) {
-        return menus
-      }
-
       const {isSpamReported} = this.state
-      const badScore = score.get('bad_score')
-      const isSpam = score.get('is_spam')
+      const badScore = score ? score.get('bad_score') : null
+      const isSpam = score ? score.get('is_spam') : false
 
       menus.push(
         {
@@ -77,7 +73,9 @@ export default function initialize({api, uiComponents}) {
             <li className="menuItem--spamfilter" key="spamfilter">
               <h4>SpamFilter</h4>
               <div className="menuItem--spamfilter-spamScore">
-                <span>Score: {badScore.toFixed(4)}</span>
+                {score !== null
+                  ? <span>Score: {badScore.toFixed(4)}</span>
+                  : <span><_FM id="spamfilter.label.undetermined" /></span>}
                 {!isSpam &&
                   <button
                     onClick={this.onClickReportAsSpam.bind(this)}
@@ -102,7 +100,7 @@ export default function initialize({api, uiComponents}) {
       // 投げっぱなし
       api.makePluginRequest('POST', 'spamfilter', '/report')
         .send({
-          ...status.toJSON(),
+          status: status.toJSON(),
           account: account.toJSON(),
         })
         .end()
