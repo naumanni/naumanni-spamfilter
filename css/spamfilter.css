@@ -1,0 +1,41 @@
+.menuItem--spamfilter {
+  padding: $marginDefault;
+
+  h4 {
+    font-size: 0.8rem;
+    text-align: left;
+    margin: 0;
+    font-family: sans-serif;
+  }
+
+  .menuItem--spamfilter-spamScore {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+
+    > span {
+      font-size: 0.8rem;
+      line-height: 1.5rem;
+      border: 1px solid transparent;
+      margin-left: -1px;
+    }
+
+    > button {
+      margin-left: $marginDefault;
+      margin-top: -2px;
+    }
+  }
+}
+
+.spamfilter-hideContent {
+  margin-top: $marginDefault;
+
+  .spamFilter-attentionMessage {
+    background: $colorWarningBackground;
+    color: $colorWarningText;
+    border: 1px solid $colorWarningBorder;
+    border-radius: $marginHalf;
+    margin: 0 $marginDefault 0 0;
+    padding: $marginHalf;
+  }
+}

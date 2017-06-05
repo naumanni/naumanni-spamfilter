@@ -1,71 +1,110 @@
+/* eslint-disable no-unused-vars */
 import {Map} from 'immutable'
 import React from 'react'
 
 
-export default function initialize({uiComponents}) {
+export default function initialize({api, uiComponents}) {
+  const {IconFont} = uiComponents
+
   uiComponents.TimelineStatus = class ExtendedTimelineStatus extends uiComponents.TimelineStatus {
-    renderBody() {
+    shouldHideContent() {
       const {status} = this.props
       const {isSpamOpen} = this.state
       const score = status.getExtended('spamfilter')
 
-      if(!score || !Map.isMap(score)) {
+      if(!score) {
+        return false
+      }
+
+      if(!(score.get('is_spam') && !isSpamOpen)) {
+        return false
+      }
+
+      return true
+    }
+
+    renderBody() {
+      if(!this.shouldHideContent())
         return super.renderBody()
-      }
 
-      const spamScoreNode = <SpamScore
-        spamScore={score.get('spam_score')}
-        notSpamScore={score.get('not_spam_score')}
-        isSpam={score.get('is_spam')}
-      />
+      // hide content
+      return (
+        <div className="spamfilter-hideContent">
+          <span className="spamFilter-attentionMessage">
+            <IconFont iconName="attention" />
+            このトゥートはスパムと判定されました
+          </span>
 
-      if(score.get('is_spam') && !isSpamOpen) {
-        // hide content
-        return (
-          <div className="spamfilter-hideContent">
-            {spamScoreNode}
-          </div>
-        )
-      } else {
-        // open content
-        return (
-          <div className="">
-            {super.renderBody()}
-            {spamScoreNode}
-          </div>
-        )
-      }
+          <button
+            onClick={this.onClickOpenSpam.bind(this)}
+            className="button button--mini button--warning">見る</button>
+        </div>
+      )
     }
 
     renderMedia() {
-      const {status} = this.props
-      const {isSpamOpen} = this.state
-      const score = status.getExtended('spamfilter')
-
-      if(!score || !Map.isMap(score)) {
+      if(!this.shouldHideContent())
         return super.renderMedia()
-      }
-
-      if(score.get('is_spam') && !isSpamOpen) {
-        // hide content
-        return null
-      } else {
-        // open content
-        return super.renderMedia()
-      }
     }
-  }
-}
 
+    renderActions() {
+      if(!this.shouldHideContent())
+        return super.renderActions()
+    }
 
-class SpamScore extends React.Component {
-  render() {
-    const {spamScore, notSpamScore, isSpam} = this.props
-    return (
-      <div className={`spamfilter-spamScore ${isSpam ? 'is-spam' : 'is-not-spam'}`}>
-        <span>spamScore: {spamScore.toFixed(4)}</span>
-        <span>notSpamScore: {notSpamScore.toFixed(4)}</span>
-      </div>
-    )
+    onClickOpenSpam() {
+      this.setState({isSpamOpen: true})
+    }
+
+    renderStatusMenuItems() {
+      const {status} = this.props
+      const score = status.getExtended('spamfilter')
+      const menus = super.renderStatusMenuItems()
+
+      if(!score) {
+        return menus
+      }
+
+      const {isSpamReported} = this.state
+      const badScore = score.get('bad_score')
+      const isSpam = score.get('is_spam')
+
+      menus.push(
+        {
+          weight: 0,
+          content: (
+            <li className="menuItem--spamfilter" key="spamfilter">
+              <h4>SpamFilter</h4>
+              <div className="menuItem--spamfilter-spamScore">
+                <span>Score: {badScore.toFixed(4)}</span>
+                {!isSpam &&
+                  <button
+                    onClick={this.onClickReportAsSpam.bind(this)}
+                    disabled={isSpamReported ? true : false}
+                    className="button button--mini">スパムとして報告</button>}
+              </div>
+            </li>
+          )
+        },
+      )
+
+      return menus
+    }
+
+    /**
+     * 当該トゥートをSpamとして報告する
+     */
+    onClickReportAsSpam() {
+      const {account, status} = this.props
+      this.setState({isSpamReported: true})
+
+      // 投げっぱなし
+      api.makePluginRequest('POST', 'spamfilter', '/report')
+        .send({
+          ...status.toJSON(),
+          account: account.toJSON(),
+        })
+        .end()
+    }
   }
 }
