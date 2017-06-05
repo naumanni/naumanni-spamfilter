@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import {Map} from 'immutable'
 import React from 'react'
+import {FormattedMessage as _FM} from 'react-intl'
 
 
 export default function initialize({api, uiComponents}) {
@@ -32,12 +33,12 @@ export default function initialize({api, uiComponents}) {
         <div className="spamfilter-hideContent">
           <span className="spamFilter-attentionMessage">
             <IconFont iconName="attention" />
-            このトゥートはスパムと判定されました
+            <_FM id="spamfilter.label.attention" />
           </span>
 
           <button
             onClick={this.onClickOpenSpam.bind(this)}
-            className="button button--mini button--warning">見る</button>
+            className="button button--mini button--warning"><_FM id="spamfilter.label.show_toot" /></button>
         </div>
       )
     }
@@ -81,7 +82,7 @@ export default function initialize({api, uiComponents}) {
                   <button
                     onClick={this.onClickReportAsSpam.bind(this)}
                     disabled={isSpamReported ? true : false}
-                    className="button button--mini">スパムとして報告</button>}
+                    className="button button--mini"><_FM id="spamfilter.label.report" /></button>}
               </div>
             </li>
           )

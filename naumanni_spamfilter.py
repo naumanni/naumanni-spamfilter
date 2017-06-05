@@ -42,21 +42,19 @@ class SpamFilterPlugin(Plugin):
             return objects
 
         # 1. RedisでOGPが保存済みかしらべてgetする
-        # keys = list(texts.keys())
-        # cached = redis.mget([_make_redis_key(h) for h in keys])
-        # for h, cached_spam_result in zip(keys, cached):
-        #     if cached_spam_result and cached_spam_result != b'a':
-        #         cached_spam_result = json.loads(cached_spam_result)
-        #         statuses = texts.pop(h)
-        #         for status in statuses:
-        #             status.add_extended_attributes('spamfilter', cached_spam_result)
+        keys = list(texts.keys())
+        cached = redis.mget([_make_redis_key(h) for h in keys])
+        for h, cached_spam_result in zip(keys, cached):
+            if cached_spam_result and cached_spam_result != b'a':
+                cached_spam_result = json.loads(cached_spam_result)
+                statuses = texts.pop(h)
+                for status in statuses:
+                    status.add_extended_attributes('spamfilter', cached_spam_result)
 
         # 2. 全部celeryする
         tests = list(texts.items())
-        logger.debug('tests %d texts', len(tests))
         job = test_spams.delay([statuses[0].plainContent for h, statuses in tests])
         result = job.get()
-        logger.debug('result %r', result)
         if 'failed' in result:
             logger.error('spam api failed: %s', result['failed'])
         else:
@@ -67,7 +65,6 @@ class SpamFilterPlugin(Plugin):
                 if 'failed' in spam_result:
                     logger.error('spam api failed : %s', spam_result['failed'])
                 else:
-                    logger.debug('%d: %r', spam_result)
                     if not statuses:
                         logger.warning('hash mismatch', statuses)
                     for status in statuses:
@@ -76,7 +73,6 @@ class SpamFilterPlugin(Plugin):
                     redis_updates[_make_redis_key(h)] = json.dumps(spam_result)
 
         # 3. RedisにCacheを保存しておく
-        logger.debug('redis update %r', redis_updates)
         if redis_updates:
             expires = timedelta(hours=6)
             with redis.pipeline() as pipe:

@@ -4,6 +4,7 @@
   "main": "js/index.es6",
   "author": "Shin ADACHI <shn@glucose.jp>",
   "license": "AGPL-3.0",
+  "private": true,
   "eslintConfig": {
     "extends": [
       "eslint:recommended"
@@ -12,7 +13,7 @@
     "env": {
       "es6": true,
       "browser": true,
-      "node": false
+      "node": true
     }
   },
   "babel": {
@@ -28,6 +29,7 @@
     "babel-preset-react": "^6.24.1",
     "babel-preset-stage-1": "^6.24.1",
     "immutable": "^3.8.1",
-    "react": "^15.5.4"
+    "react": "^15.5.4",
+    "react-intl": "^2.3.0"
   }
 }
