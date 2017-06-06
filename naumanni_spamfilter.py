@@ -65,7 +65,10 @@ class SpamFilterPlugin(Plugin):
 
         # 2. 全部celeryする
         tests = list(texts.items())
-        job = test_spams.delay([statuses[0].plainContent for h, statuses in tests])
+        job = test_spams.delay([{
+            'uri': statuses[0].uri,
+            'content': _strip_content(statuses[0].plainContent),
+        } for h, statuses in tests])
         result = job.get()
         if 'failed' in result:
             logger.error('spam api failed: %s', result['failed'])
@@ -74,15 +77,15 @@ class SpamFilterPlugin(Plugin):
             for idx, spam_result in enumerate(result):
                 h, statuses = tests[idx]
 
-                if 'failed' in spam_result:
-                    logger.error('spam api failed : %s', spam_result['failed'])
-                else:
-                    if not statuses:
-                        logger.warning('hash mismatch', statuses)
-                    for status in statuses:
-                        status.add_extended_attributes('spamfilter', spam_result)
+                if not statuses:
+                    logger.warning('hash mismatch: %r', statuses)
+                elif statuses[0].uri != spam_result['uri']:
+                    logger.warning('uri mismatch: %r', statuses)
+                    continue
+                for status in statuses:
+                    status.add_extended_attributes('spamfilter', spam_result)
 
-                    redis_updates[_make_redis_key(h)] = json.dumps(spam_result)
+                redis_updates[_make_redis_key(h)] = json.dumps(spam_result)
 
         # 3. RedisにCacheを保存しておく
         if redis_updates:
@@ -101,7 +104,17 @@ def report_spam():
     status = Status(**request.json['status'])
     account = Account(**request.json['account'])
 
-    report = '@{},{}'.format(account.acct, status.plainContent).encode('utf-8')
+    report = json.dumps({
+        'account': {
+            'acct': account.acct,
+        },
+        'content': status.content,
+        'uri': status.uri,
+        'spoiler_text': status.spoiler_text,
+
+        '_plain_content': _strip_content(status.content),
+        '_reporter': 'shn@oppai.tokyo',
+    })
 
     # push
     redis = current_flaskapp.naumanni.redis
@@ -111,12 +124,11 @@ def report_spam():
 
 
 @celery.task
-def test_spams(rawPlainContents):
-    # remove returns
-    plainContents = [_strip_content(txt) for txt in rawPlainContents]
-
+def test_spams(statuses):
     http_client = httpclient.HTTPClient()
-    body = urlencode({'texts': '\n'.join(plainContents), 'spams': ''}, encoding='utf-8')
+    data = json.dumps({'texts': statuses, 'spams': ''})
+    body = urlencode({'json': data}, encoding='utf-8')
+
     try:
         response = http_client.fetch(
             SPAM_API_ENDPOINT,
@@ -131,31 +143,18 @@ def test_spams(rawPlainContents):
 
     if response.code == 200:
         rv = []
-        response = response.body.decode('utf-8').strip().splitlines()
+        response = json.loads(response.body.decode('utf-8'))
         logger.debug('response: %r', response)
-        for idx, ln in enumerate(response):
-            plainContent = plainContents[idx]
-            rawPlainContent = rawPlainContents[idx]
+        for idx, score in enumerate(response):
+            bad_score, good_score = score['bad'], score['good']
+            is_spam = bad_score > good_score and bad_score >= 0.5
 
-            result = {
-                'hash': _content_to_hexdigest(rawPlainContent),
-                'test_text': plainContent,
-            }
-            try:
-                bad_score, good_score = ln.split(',')
-                bad_score = float(bad_score)
-                good_score = float(good_score)
-                is_spam = bad_score > good_score and bad_score >= 0.5
-            except Exception as exc:
-                result['failed'] = str(exc)
-            else:
-                logger.debug('test_spam %s -> %f %f %r', plainContent, bad_score, good_score, is_spam)
-                result.update({
-                    'bad_score': bad_score,
-                    'good_score': good_score,
-                    'is_spam': is_spam,
-                })
-            rv.append(result)
+            rv.append({
+                'uri': score['uri'],
+                'bad_score': bad_score,
+                'good_score': good_score,
+                'is_spam': is_spam,
+            })
         return rv
     else:
         return {
@@ -176,17 +175,24 @@ def bulk_report_spams():
         logger.info('no report spams')
         return
 
-    logger.info('report spams %r', reports)
-
-    reports = b'\n'.join(reports).decode('utf-8')
+    # api側の仕様で謎なことになっている
+    # manually make json
+    data = {
+        'spams': json.loads(b'[' + b',\n'.join(reports) + b']'),
+        'texts': ''
+    }
 
     http_client = httpclient.HTTPClient()
-    body = urlencode({'spams': reports, 'texts': ''}, encoding='utf-8')
+    body = urlencode({'json': json.dumps(data)}, encoding='utf-8')
+    logger.debug(body)
     try:
         http_client.fetch(
             SPAM_API_ENDPOINT,
             method='POST',
-            body=body
+            body=body,
+            headers={
+                'Content-Type': 'application/json; charset=utf-8'
+            }
         )
     except httpclient.HTTPError as exc:
         print(exc)
