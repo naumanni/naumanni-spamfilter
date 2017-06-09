@@ -7,7 +7,7 @@ import {FormattedMessage as _FM} from 'react-intl'
 export default function initialize({api, uiComponents}) {
   const {IconFont} = uiComponents
 
-  uiComponents.TimelineStatus = class ExtendedTimelineStatus extends uiComponents.TimelineStatus {
+  uiComponents.TimelineStatus = class SpamFilterTimelineStatus extends uiComponents.TimelineStatus {
     shouldHideContent() {
       const {status} = this.props
       const {isSpamOpen} = this.state

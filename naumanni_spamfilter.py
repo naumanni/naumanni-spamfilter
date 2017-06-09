@@ -57,7 +57,7 @@ class SpamFilterPlugin(Plugin):
         keys = list(texts.keys())
         cached = redis.mget([_make_redis_key(h) for h in keys])
         for h, cached_spam_result in zip(keys, cached):
-            if cached_spam_result and cached_spam_result != b'a':
+            if cached_spam_result:
                 cached_spam_result = json.loads(cached_spam_result)
                 statuses = texts.pop(h)
                 for status in statuses:
