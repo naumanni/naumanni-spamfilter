@@ -1,17 +1,25 @@
 /* eslint-disable no-unused-vars */
 import {Map} from 'immutable'
 import React from 'react'
-import {FormattedMessage as _FM} from 'react-intl'
+import {intlShape, FormattedMessage as _FM} from 'react-intl'
 
 
 export default function initialize({api, uiComponents}) {
   const {IconFont} = uiComponents
 
   uiComponents.TimelineStatus = class SpamFilterTimelineStatus extends uiComponents.TimelineStatus {
+    static contextTypes = {
+      intl: intlShape,
+    }
+
     shouldHideContent() {
       const {status} = this.props
-      const {isSpamOpen} = this.state
+      const {isSpamOpen, isSpamReported} = this.state
       const score = status.getExtended('spamfilter')
+
+      // レポート済Spamはもう表示しない
+      if(isSpamReported)
+        return true
 
       if(!score) {
         return false
@@ -29,6 +37,7 @@ export default function initialize({api, uiComponents}) {
         return super.renderBody()
 
       // hide content
+      const {isSpamReported} = this.state
       return (
         <div className="spamfilter-hideContent">
           <span className="spamFilter-attentionMessage">
@@ -36,9 +45,11 @@ export default function initialize({api, uiComponents}) {
             <_FM id="spamfilter.label.attention" />
           </span>
 
+          {!isSpamReported &&
           <button
             onClick={this.onClickOpenSpam.bind(this)}
             className="button button--mini button--warning"><_FM id="spamfilter.label.show_toot" /></button>
+          }
         </div>
       )
     }
@@ -53,41 +64,33 @@ export default function initialize({api, uiComponents}) {
         return super.renderActions()
     }
 
-    onClickOpenSpam() {
-      this.setState({isSpamOpen: true})
-    }
-
-    renderStatusMenuItems() {
+    renderActionButtons() {
+      const {formatMessage: _} = this.context.intl
       const {status} = this.props
-      const score = status.getExtended('spamfilter')
-      const menus = super.renderStatusMenuItems()
-
       const {isSpamReported} = this.state
-      const badScore = score ? score.get('bad_score') : null
-      const isSpam = score ? score.get('is_spam') : false
+      const buttons = super.renderActionButtons()
+      const score = status.getExtended('spamfilter')
+      const badScore = score ? score.get('bad_score').toFixed(4) : '---'
+      const goodScore = score ? score.get('good_score').toFixed(4) : '---'
 
-      menus.push(
-        {
-          weight: 0,
-          content: (
-            <li className="menuItem--spamfilter" key="spamfilter">
-              <h4>SpamFilter</h4>
-              <div className="menuItem--spamfilter-spamScore">
-                {score !== null
-                  ? <span>Score: {badScore.toFixed(4)}</span>
-                  : <span><_FM id="spamfilter.label.undetermined" /></span>}
-                {!isSpam &&
-                  <button
-                    onClick={this.onClickReportAsSpam.bind(this)}
-                    disabled={isSpamReported ? true : false}
-                    className="button button--mini"><_FM id="spamfilter.label.report" /></button>}
-              </div>
-            </li>
-          )
-        },
+      /// 最後のdotの1個前に入れる
+      buttons.splice(buttons.length - 1, 0,
+        <button
+          key="spamButton"
+          className=""
+          disabled={isSpamReported ? true : false}
+          alt={_({id: 'spamfilter.label.report'})}
+          title={`${_({id: 'spamfilter.label.report'})}\n${badScore} / ${goodScore}`}
+          onClick={this.onClickReportAsSpam.bind(this)}>
+          <IconFont iconName="cancel" />
+        </button>
       )
 
-      return menus
+      return buttons
+    }
+
+    onClickOpenSpam() {
+      this.setState({isSpamOpen: true})
     }
 
     /**
