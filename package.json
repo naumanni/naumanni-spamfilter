@@ -1,0 +1,35 @@
+{
+  "name": "naumanni-spamfilter",
+  "version": "1.0.0",
+  "main": "js/index.es6",
+  "author": "Shin ADACHI <shn@glucose.jp>",
+  "license": "AGPL-3.0",
+  "private": true,
+  "eslintConfig": {
+    "extends": [
+      "eslint:recommended"
+    ],
+    "parser": "babel-eslint",
+    "env": {
+      "es6": true,
+      "browser": true,
+      "node": true
+    }
+  },
+  "babel": {
+    "presets": [
+      "react",
+      "es2015",
+      "stage-1"
+    ],
+    "plugins": []
+  },
+  "dependencies": {
+    "babel-preset-es2015": "^6.24.1",
+    "babel-preset-react": "^6.24.1",
+    "babel-preset-stage-1": "^6.24.1",
+    "immutable": "^3.8.1",
+    "react": "^15.5.4",
+    "react-intl": "^2.3.0"
+  }
+}
