@@ -64,24 +64,31 @@ class SpamFilterPlugin(Plugin):
                     status.add_extended_attributes('spamfilter', cached_spam_result)
 
         # 2. 全部celeryする
-        tests = list(texts.items())
-        job = test_spams.delay([{
+        test_contents = [{
             'uri': statuses[0].uri,
             'content': _strip_content(statuses[0].plainContent),
-        } for h, statuses in tests])
+        } for h, statuses in texts.items()]
+        # contentが空だと500エラー返してくるみたいなので省く
+        test_contents = list(filter(lambda x: len(x['content']), test_contents))
+
+        job = test_spams.delay(test_contents)
         result = job.get()
         if 'failed' in result:
             logger.error('spam api failed: %s', result['failed'])
+            return objects
         else:
             redis_updates = {}
             for idx, spam_result in enumerate(result):
-                h, statuses = tests[idx]
-
+                for h, statuses in texts.items():
+                    if statuses[0].uri == spam_result['uri']:
+                        break
+                else:
+                    logger.warning('uri mismatch: %s %r', spam_result['uri'], spam_result)
+                    continue
                 if not statuses:
                     logger.warning('hash mismatch: %r', statuses)
-                elif statuses[0].uri != spam_result['uri']:
-                    logger.warning('uri mismatch: %r', statuses)
                     continue
+
                 for status in statuses:
                     status.add_extended_attributes('spamfilter', spam_result)
 
@@ -137,29 +144,29 @@ def test_spams(statuses):
         )
     except httpclient.HTTPError as exc:
         print(exc)
-        print(exc.response.body.decode('utf-8'))
+        response = exc.response
+        print(response.body.decode('utf-8'))
         logger.error(exc.response.body.decode('utf-8'))
-        raise
-
-    if response.code == 200:
-        rv = []
-        response = json.loads(response.body.decode('utf-8'))
-        logger.debug('response: %r', response)
-        for idx, score in enumerate(response):
-            bad_score, good_score = score['bad'], score['good']
-            is_spam = bad_score > good_score and bad_score >= 0.5
-
-            rv.append({
-                'uri': score['uri'],
-                'bad_score': bad_score,
-                'good_score': good_score,
-                'is_spam': is_spam,
-            })
-        return rv
-    else:
         return {
-            'failed': 'status code %s: %s'.format(response.code, response.reason)
+            'failed': 'status code {}: {}'.format(response.code, response.reason),
+            'request': body,
+            'response': response.body.decode('utf-8'),
         }
+
+    rv = []
+    response = json.loads(response.body.decode('utf-8'))
+    logger.debug('response: %r', response)
+    for idx, score in enumerate(response):
+        bad_score, good_score = score['bad'], score['good']
+        is_spam = bad_score > good_score and bad_score >= 0.5
+
+        rv.append({
+            'uri': score['uri'],
+            'bad_score': bad_score,
+            'good_score': good_score,
+            'is_spam': is_spam,
+        })
+    return rv
 
 
 @celery.task(ignore_result=True)
