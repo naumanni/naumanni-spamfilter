@@ -24,6 +24,7 @@ SPAM_REPORT_REDIS_KEY = '{}:report'.format(__name__)
 class SpamFilterPlugin(Plugin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.report_task = None
 
     def on_after_initialize_webserver(self, webserver):
         """webserver初期化後によばれるので、必要なWorkerなどをセットアップする"""
@@ -34,11 +35,16 @@ class SpamFilterPlugin(Plugin):
 
     def on_after_start_first_process(self):
         # 5分毎にレポートを送信する
-        ioloop.PeriodicCallback(
+        self.report_task = ioloop.PeriodicCallback(
             functools.partial(bulk_report_spams, self.app_ref),
             30000,
             # 5 * 60 * 1000,
-        ).start()
+        )
+        self.report_task.start()
+
+    def on_before_stop_server(self):
+        if self.report_task:
+            self.report_task.stop()
 
     async def on_filter_statuses(self, objects, entities):
         #
