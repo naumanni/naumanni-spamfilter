@@ -1,6 +1,6 @@
 {
   "name": "naumanni-spamfilter",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "main": "js/index.es6",
   "author": "Shin ADACHI <shn@glucose.jp>",
   "license": "AGPL-3.0",
