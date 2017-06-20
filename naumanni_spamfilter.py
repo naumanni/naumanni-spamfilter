@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from collections import defaultdict
-from datetime import timedelta
 from hashlib import sha256
 import functools
 import itertools
@@ -8,7 +7,7 @@ import json
 import logging
 from urllib.parse import urlencode
 
-from tornado import gen, httpclient, ioloop, web
+from tornado import httpclient, ioloop, web
 
 from naumanni.mastodon_models import Account, Status
 from naumanni.plugin import Plugin
