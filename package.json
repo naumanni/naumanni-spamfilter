@@ -1,7 +1,7 @@
 {
   "name": "naumanni-spamfilter",
   "version": "1.0.0",
-  "main": "js/index.es6",
+  "main": "lib/index.js",
   "author": "Shin ADACHI <shn@glucose.jp>",
   "license": "AGPL-3.0",
   "private": true,
@@ -31,5 +31,9 @@
     "immutable": "^3.8.1",
     "react": "^15.5.4",
     "react-intl": "^2.3.0"
+  },
+  "scripts": {
+    "build": "babel -d lib js",
+    "postinstall": "yarn run build"
   }
 }
