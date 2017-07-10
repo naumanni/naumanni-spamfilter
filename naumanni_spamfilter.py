@@ -123,6 +123,11 @@ class ReportSpamHandler(web.RequestHandler):
         status = Status(**request_json['status'])
         account = Account(**request_json['account'])
 
+        if not _should_report_spam(status):
+            self.write({'result': 'ok'})
+            await self.flush()
+            return
+
         report = json.dumps({
             'account': {
                 'acct': account.acct,
@@ -223,6 +228,12 @@ def _content_to_hexdigest(plainContent):
 
 def _make_redis_key(hash):
     return '{}:spam:{}'.format(__name__, hash)
+
+
+def _should_report_spam(status: Status) -> bool:
+    if status.visibility == 'direct':  # TODO: Define as enum
+        return False
+    return True
 
 
 def _strip_content(c):
