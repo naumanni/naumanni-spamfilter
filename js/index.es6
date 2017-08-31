@@ -1,15 +1,27 @@
 /* eslint-disable no-unused-vars */
 import {Map} from 'immutable'
 import React from 'react'
+import Toggle from 'react-toggle'
+import classNames from 'classnames'
 import {intlShape, FormattedMessage as _FM} from 'react-intl'
 
 
-export default function initialize({api, uiComponents}) {
+const hackTimelineStatus = (api, uiComponents) => {
   const {IconFont} = uiComponents
 
   uiComponents.TimelineStatus = class SpamFilterTimelineStatus extends uiComponents.TimelineStatus {
     static contextTypes = {
       intl: intlShape,
+    }
+
+    /**
+     * @override
+     */
+    shouldComponentUpdate(nextProps, nextState) {
+      if(nextProps.isSpamFilterActive !== this.props.isSpamFilterActive)
+        return true
+
+      return super.shouldComponentUpdate(nextProps, nextState)
     }
 
     shouldHideContent() {
@@ -33,6 +45,8 @@ export default function initialize({api, uiComponents}) {
     }
 
     renderBody() {
+      if(!this.props.isSpamFilterActive)
+        return super.renderBody()
       if(!this.shouldHideContent())
         return super.renderBody()
 
@@ -55,11 +69,15 @@ export default function initialize({api, uiComponents}) {
     }
 
     renderMedia() {
+      if(!this.props.isSpamFilterActive)
+        return super.renderMedia()
       if(!this.shouldHideContent())
         return super.renderMedia()
     }
 
     renderActions() {
+      if(!this.props.isSpamFilterActive)
+        return super.renderActions()
       if(!this.shouldHideContent())
         return super.renderActions()
     }
@@ -109,4 +127,107 @@ export default function initialize({api, uiComponents}) {
         .end()
     }
   }
+}
+
+const hackColumnHeaderMenu = (uiComponents) => {
+  uiComponents.ColumnHeaderMenu =
+    class SpamFilterColumnHeaderMenu extends uiComponents.ColumnHeaderMenu {
+
+      /**
+       * @override
+       */
+      render() {
+        const {
+          children, isCollapsed,
+          isSpamFilterActive, onToggleSpamFilter, onClickClose,
+        } = this.props
+
+        return (
+          <div className={classNames(
+            'column-menuContent',
+            {'collapsed': isCollapsed}
+          )} ref="container">
+            {children}
+            <div className="menu-item menu-item--toggle">
+              <Toggle
+                checked={isSpamFilterActive}
+                onChange={onToggleSpamFilter} />
+              <label htmlFor={`spam-visibility`}><_FM id="spamfilter.column.menu.filter_spams" /></label>
+            </div>
+            <div className="menu-item--default" onClick={onClickClose}>
+              <_FM id="column.menu.close" />
+            </div>
+          </div>
+        )
+      }
+    }
+}
+
+const hackTimelineColumn = (uiColumns, {ColumnHeaderMenu: SpamFilterColumnHeaderMenu}) => {
+  const TIMELINE_FILTER_SPAMFILTER = 'timeline_filter_spamfilter'
+
+  uiColumns.timeline = 
+    class SpamFilterTimelineColumn extends uiColumns.timeline {
+
+      constructor(...args) {
+        super(...args)
+        this.state = {
+          ...this.state,
+          isSpamFilterActive: localStorage.getItem(this.storageKeyForFilter(TIMELINE_FILTER_SPAMFILTER))
+            ? JSON.parse(localStorage.getItem(this.storageKeyForFilter(TIMELINE_FILTER_SPAMFILTER)))
+            : false,
+        }
+      }
+
+      /**
+       * @override
+       */
+      renderMenuContent() {
+        return (
+          <SpamFilterColumnHeaderMenu
+            isCollapsed={!this.state.isMenuVisible}
+            isSpamFilterActive={this.state.isSpamFilterActive}
+            onToggleSpamFilter={this.onToggleSpamFilter.bind(this)}
+            onClickClose={this.props.onClose}
+          >
+            {this.renderFilterMenus()}
+          </SpamFilterColumnHeaderMenu>
+        )
+      }
+
+      /**
+       * @override
+       */
+      propsForPagingContent() {
+        const {isSpamFilterActive} = this.state
+
+        return {
+          ...super.propsForPagingContent(),
+          options: {
+            isSpamFilterActive,
+          },
+        }
+      }
+
+      // cb
+
+      onClickMenuButton(e) {
+        e.stopPropagation()
+        this.setState({isMenuVisible: !this.state.isMenuVisible})
+      }
+
+      onToggleSpamFilter() {
+        const newValue = !this.state.isSpamFilterActive
+
+        this.setState({isSpamFilterActive: newValue})
+
+        localStorage.setItem(this.storageKeyForFilter(TIMELINE_FILTER_SPAMFILTER), newValue)
+      }
+    }
+}
+
+export default function initialize({api, uiColumns, uiComponents}) {
+  hackTimelineStatus(api, uiComponents)
+  hackColumnHeaderMenu(uiComponents)
+  hackTimelineColumn(uiColumns, uiComponents)
 }
